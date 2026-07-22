@@ -34,12 +34,13 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Mirrors Telegram's own webhook delivery user-agent, since the host's
+        // Bot Verification whitelist was configured to trust this exact string.
+        // Without this, Vercel's default fetch user-agent gets flagged as a bot.
+        'User-Agent': 'TelegramBot (like TwitterBot)',
         ...(secretToken ? { 'X-Telegram-Bot-Api-Secret-Token': secretToken } : {}),
       },
       body: rawBody,
-      // Vercel functions have their own execution timeout (10s on Hobby plan,
-      // longer on Pro) — this is separate from that ceiling and just avoids a
-      // hung upstream request stalling forever.
       signal: AbortSignal.timeout(20000),
     });
 
@@ -49,9 +50,9 @@ export default async function handler(req, res) {
     res.status(upstreamResponse.status).send(upstreamText);
   } catch (err) {
     console.error('Relay error forwarding to PHP backend:', err);
-    // Still respond 200 to Telegram so it doesn't endlessly retry a request
-    // that did reach us — the real failure gets logged here for you to check
-    // in the Vercel dashboard's function logs.
-    res.status(200).send('relay_error_logged');
+    // TEMPORARY: surface the real error message in the response body so we can
+    // diagnose from curl directly. Remove this once things are confirmed working
+    // and replace with the generic 200 'relay_error_logged' fallback again.
+    res.status(200).send('relay_error_logged: ' + (err?.message || String(err)));
   }
 }
